@@ -453,18 +453,16 @@ func (tree *Rtree) adjustTreeForRemove(n, nn *node, siblings []*node) {
 			keepRunning = false
 			if n.entries.len() == 1 && !n.leaf {
 				mainEntry := n.entries.get(0).node
-
+				data := mainEntry.getEntries()
+				n.reset()
+				
 				if mainEntry.leaf {
 					n.leaf = true
-					data := mainEntry.getEntries()
-					n.reset()
 					for _, en := range data {
 						n.insertLeaf(en)
 					}
 
 				} else {
-					data := mainEntry.getEntries()
-					n.reset()
 					for _, en := range data {
 						n.insertNonLeaf(en)
 					}
