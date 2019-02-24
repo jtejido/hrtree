@@ -87,17 +87,18 @@ func TestNoIntersection(t *testing.T) {
 	}
 }
 
-func TestNoIntersectionJustTouches(t *testing.T) {
+// consider touching an intersection
+// func TestNoIntersectionJustTouches(t *testing.T) {
 
-	rect1, _ := NewRect(Point{1, 2}, Point{2, 3})
-	rect2, _ := NewRect(Point{-1, -2}, Point{1.5, 2})
+// 	rect1, _ := NewRect(Point{1, 2}, Point{2, 3})
+// 	rect2, _ := NewRect(Point{-1, -2}, Point{1.5, 2})
 
-	// rect1 and rect2 fail to overlap in just one dimension (second)
+// 	// rect1 and rect2 fail to overlap in just one dimension (second)
 
-	if intersect(&rect1, &rect2) {
-		t.Errorf("Expected intersect(%v, %v) == nil", rect1, rect2)
-	}
-}
+// 	if intersect(&rect1, &rect2) {
+// 		t.Errorf("Expected intersect(%v, %v) == nil", rect1, rect2)
+// 	}
+// }
 
 func TestContainmentIntersection(t *testing.T) {
 

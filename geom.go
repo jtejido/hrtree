@@ -114,14 +114,23 @@ func (r *Rect) ToCenter() (center Point) {
 	return
 }
 
-func intersect(r1, r2 *Rect) bool {
-	for i := 0; i < Dim; i++ {
-		if r2.upper[i] <= r1.lower[i] || r1.upper[i] <= r2.lower[i] {
-			return false
-		}
+// We return positive result on rectangles touching
+func intersect(r1, r2 *Rect) (ok bool) {
+	ok = true
+	for i := 0; ok && i < Dim; i++ {
+		ok = r1.lower[i] <= r2.upper[i] && r1.upper[i] >= r2.lower[i]
 	}
-	return true
+	return
 }
+
+// func intersect(r1, r2 *Rect) bool {
+// 	for i := 0; i < Dim; i++ {
+// 		if r2.upper[i] <= r1.lower[i] || r1.upper[i] <= r2.lower[i] {
+// 			return false
+// 		}
+// 	}
+// 	return true
+// }
 
 // minDist computes the square of the distance from a point to a rectangle.
 // If the point is contained in the rectangle then the distance is zero.

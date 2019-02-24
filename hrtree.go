@@ -324,8 +324,7 @@ type Spatial interface {
 }
 
 // Insert inserts a spatial object into the tree. Through Center(), we compute the hilbert value
-// from the uncollapsed 3-dimensional coordinates. Through Bounds(), we get to operate on the boundix box,
-// whether enlarging it, checking for intersects and so on.
+// from the uncollapsed 3-dimensional coordinates. Through Bounds(), we get to operate on the bounding box.
 func (tree *Rtree) Insert(obj Spatial) {
 	p := obj.Center()
 
@@ -350,7 +349,7 @@ func (tree *Rtree) insert(e entry) {
 
 	} else {
 		// split leaf if overflows
-		split, siblings = tree.handleOverflow(leaf, e, siblings)
+		split, siblings = handleOverflow(leaf, e, siblings)
 	}
 
 	// TO-DO.. make the caller handle root adjustments
@@ -415,7 +414,7 @@ func (tree *Rtree) adjustTreeForInsert(root, n, nn *node, siblings []*node) (new
 					newSiblings = append(newSiblings, np)
 
 				} else {
-					pp, newSiblings = tree.handleOverflow(np, enn, newSiblings)
+					pp, newSiblings = handleOverflow(np, enn, newSiblings)
 				}
 			} else {
 				newSiblings = append(newSiblings, np)
@@ -454,16 +453,23 @@ func (tree *Rtree) adjustTreeForRemove(n, nn *node, siblings []*node) {
 			keepRunning = false
 			if n.entries.len() == 1 && !n.leaf {
 				mainEntry := n.entries.get(0).node
-				data := mainEntry.getEntries()
-				n.reset()
 
 				if mainEntry.leaf {
 					n.leaf = true
+					data := mainEntry.getEntries()
+					n.reset()
+					for _, en := range data {
+						n.insertLeaf(en)
+					}
+
+				} else {
+					data := mainEntry.getEntries()
+					n.reset()
+					for _, en := range data {
+						n.insertNonLeaf(en)
+					}
 				}
 
-				for _, en := range data {
-					n.insertNonLeaf(en)
-				}
 			}
 
 			n.adjustLHV()
@@ -500,7 +506,11 @@ func (tree *Rtree) adjustTreeForRemove(n, nn *node, siblings []*node) {
 // The overflow handling algorithm in the Hilbert R-tree treats the overflowing nodes
 // either by moving some of the entries to one of the s - 1 cooperating siblings or by splitting
 // s nodes into s+1 nodes (2-3 splitting).
-func (tree *Rtree) handleOverflow(n *node, e entry, nodes []*node) (*node, []*node) {
+func handleOverflow(n *node, e entry, nodes []*node) (*node, []*node) {
+
+	min := n.min
+
+	max := n.max
 
 	var targetPos int
 
@@ -523,8 +533,8 @@ func (tree *Rtree) handleOverflow(n *node, e entry, nodes []*node) (*node, []*no
 		}
 	}
 
-	if entries.len() > len(nodes)*tree.MaxChildren {
-		nn = newNode(tree.MinChildren, tree.MaxChildren)
+	if entries.len() > len(nodes)*max {
+		nn = newNode(min, max)
 		nn.leaf = e.leaf
 
 		prevSib := n.left
@@ -678,6 +688,7 @@ func (tree *Rtree) SearchIntersect(bb *Rect) []Spatial {
 func (tree *Rtree) searchIntersect(n *node, bb *Rect, results []Spatial) []Spatial {
 
 	for _, e := range n.getEntries() {
+
 		if intersect(e.getMBR(), bb) {
 			if n.leaf {
 				results = append(results, e.obj)

@@ -373,6 +373,53 @@ func TestSiblings(t *testing.T) {
 
 }
 
+func TestHandleOverflow(t *testing.T) {
+	node1 := newNode(DefaultMinNodeEntries, DefaultMaxNodeEntries)
+	node1.leaf = true
+	siblings := make([]*node, 0)
+	hf2, _ := h.New(uint32(5), 32)
+
+	for i := 0; i < DefaultMaxNodeEntries; i++ {
+		rect := rect(Point{2, float64(i)}, Point{2, float64(i)})
+		c := rect.Center()
+		h := hf2.Encode(uint64(c[0]), uint64(c[1]))
+		entry := entry{bb: rect.Bounds(), obj: rect, h: h.Uint64(), leaf: true}
+		node1.insertLeaf(entry)
+	}
+
+	rect2 := rect(Point{2, 0}, Point{2, 0})
+	c2 := rect2.Center()
+	h2 := hf2.Encode(uint64(c2[0]), uint64(c2[1]))
+	entry2 := entry{bb: rect2.Bounds(), obj: rect2, h: h2.Uint64(), leaf: true}
+
+	node2, _ := handleOverflow(node1, entry2, siblings)
+
+	if DefaultMaxNodeEntries/2 != node1.entries.len() {
+		t.Errorf("incorrect number of entries at node1")
+	}
+
+	if DefaultMaxNodeEntries/2+1 != node2.entries.len() {
+		t.Errorf("incorrect number of entries at node2")
+	}
+
+	if node1 != node2.right {
+		t.Errorf("incorrect right sibling at node2")
+	}
+
+	if nil != node2.left {
+		t.Errorf("incorrect left sibling at node2")
+	}
+
+	if nil != node1.right {
+		t.Errorf("incorrect right sibling at node1")
+	}
+
+	if node2 != node1.left {
+		t.Errorf("incorrect left sibling at node1")
+	}
+
+}
+
 func TestSearchIntersect(t *testing.T) {
 	rt, _ := NewTree(3, 3, 12)
 	things := []*Rect{
@@ -395,7 +442,7 @@ func TestSearchIntersect(t *testing.T) {
 	bb := rect(Point{2, 1.5}, Point{12, 7})
 	q := rt.SearchIntersect(bb)
 
-	expected := []int{1, 2, 3, 4, 6, 7}
+	expected := []int{1, 2, 3, 4, 5, 6, 7}
 
 	if len(q) != len(expected) {
 		t.Errorf("SearchIntersect failed to find all objects")
@@ -404,6 +451,115 @@ func TestSearchIntersect(t *testing.T) {
 		if index(q, things[ind]) < 0 {
 			t.Errorf("SearchIntersect failed to find things[%d]", ind)
 		}
+	}
+}
+
+func TestDelete(t *testing.T) {
+	rt, _ := NewTree(DefaultMinNodeEntries, DefaultMaxNodeEntries, 5)
+	rect0 := rect(Point{2, 4}, Point{2, 8})
+
+	rt.Insert(rect0)
+
+	if !rt.root.leaf {
+		t.Errorf("Root should be leaf")
+	}
+
+	if 1 != rt.root.entries.len() {
+		t.Errorf("Root should have 1 entry")
+	}
+
+	if 1 != len(rt.SearchIntersect(rect0)) {
+		t.Errorf("tree should have 1 result")
+	}
+
+	rect1 := rect(Point{2, 5}, Point{2, 7})
+	rt.Delete(rect1)
+
+	if !rt.root.leaf {
+		t.Errorf("Root should be leaf")
+	}
+
+	if 1 != rt.root.entries.len() {
+		t.Errorf("Root should have 1 entry")
+	}
+
+	if 1 != len(rt.SearchIntersect(rect0)) {
+		t.Errorf("tree should have 1 result")
+	}
+
+	rect2 := rect(Point{2, 2}, Point{2, 10})
+	rt.Delete(rect2)
+
+	if !rt.root.leaf {
+		t.Errorf("Root should be leaf")
+	}
+
+	if 1 != rt.root.entries.len() {
+		t.Errorf("Root should have 1 entry")
+	}
+
+	if 1 != len(rt.SearchIntersect(rect0)) {
+		t.Errorf("tree should have 1 result")
+	}
+
+	rt.Delete(rect0)
+
+	if !rt.root.leaf {
+		t.Errorf("Root should be leaf")
+	}
+
+	if 0 != rt.root.entries.len() {
+		t.Errorf("Root should have 1 entry")
+	}
+
+	if 0 != len(rt.SearchIntersect(rect0)) {
+		t.Errorf("tree should have 1 result")
+	}
+}
+
+func TestDeleteAtMax(t *testing.T) {
+	rt, _ := NewTree(DefaultMinNodeEntries, DefaultMaxNodeEntries, 12)
+
+	for i := 0; i < DefaultMaxNodeEntries; i++ {
+		r := rect(Point{2, float64(i)}, Point{2, float64(i)})
+		rt.Insert(r)
+	}
+
+	for i := 0; i < (DefaultMaxNodeEntries - DefaultMinNodeEntries); i++ {
+		r2 := rect(Point{2, float64(i)}, Point{2, float64(i)})
+		rt.Delete(r2)
+	}
+
+	if !rt.root.leaf {
+		t.Errorf("root should be leaf")
+	}
+
+	if DefaultMinNodeEntries != rt.root.entries.len() {
+		t.Errorf("incorrect number of entries left")
+	}
+
+}
+
+func TestDeleteAtMax2(t *testing.T) {
+	nodeNo := DefaultMaxNodeEntries * 4
+	rt, _ := NewTree(DefaultMinNodeEntries, DefaultMaxNodeEntries, 12)
+
+	for i := 0; i < nodeNo; i++ {
+		r := rect(Point{2, float64(i)}, Point{2, float64(i)})
+		rt.Insert(r)
+	}
+
+	for i := 0; i < nodeNo; i++ {
+		r2 := rect(Point{2, float64(i)}, Point{2, float64(i)})
+		rt.Delete(r2)
+	}
+
+	if !rt.root.leaf {
+		t.Errorf("root should be leaf")
+	}
+
+	if 0 != rt.root.entries.len() {
+		t.Errorf("incorrect number of entries left")
 	}
 }
 
