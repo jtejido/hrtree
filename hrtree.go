@@ -10,53 +10,53 @@ import (
 const (
 	DefaultMaxNodeEntries = 1000
 	DefaultMinNodeEntries = 20
-	Dim                   = 2  // default spatial dimension
+	Dim                   = 2
 	SiblingsNumber        = 2  // minimum number of cooperating siblings used for moving entries before split is considered
-	DefaultBits           = 32 // minimum bits required for hilbert computation's resolution
+	DefaultResolution     = 32 // minimum resolution required for hilbert computation's resolution
 )
 
-// Rtree represents a Hilbert R-tree, a balanced search tree for storing and querying
+// HRtree represents a Hilbert R-tree, a balanced search tree for storing and querying
 // spatial objects.  MinChildren/MaxChildren specify the minimum/maximum branching factors.
-type Rtree struct {
-	MinChildren, MaxChildren, Bits int
-	root                           *node
-	HilbertFunc                    *h.Hilbert
-	size                           int
+type HRtree struct {
+	min, max, bits int
+	root           *node
+	hf             *h.Hilbert
+	size           int
 }
 
-// NewTree creates a new R-tree instance.
-func NewTree(MinChildren, MaxChildren, Bits int) (*Rtree, error) {
-	hf, err := h.New(uint32(Bits), 2)
+// NewTree creates a new HRtree instance.
+func NewTree(min, max, bits int) (*HRtree, error) {
+	hf, err := h.New(uint32(bits), 2)
 
 	if err != nil {
 		return nil, err
 	}
 
-	if MinChildren < 0 {
-		MinChildren = DefaultMinNodeEntries
+	if min < 0 {
+		min = DefaultMinNodeEntries
 	}
 
-	if MaxChildren < 0 {
-		MaxChildren = DefaultMaxNodeEntries
+	if max < 0 {
+		max = DefaultMaxNodeEntries
 	}
 
-	if MaxChildren < MinChildren {
-		MaxChildren++
+	if max < min {
+		max++
 	}
 
-	rt := Rtree{MinChildren: MinChildren, MaxChildren: MaxChildren, Bits: Bits, HilbertFunc: hf}
-	rt.root = newNode(MinChildren, MaxChildren)
+	rt := HRtree{min: min, max: max, bits: bits, hf: hf}
+	rt.root = newNode(min, max)
 	rt.root.leaf = true
 	return &rt, nil
 }
 
 // Size returns the number of objects currently stored in tree.
-func (tree *Rtree) Size() int {
+func (tree *HRtree) Size() int {
 	return tree.size
 }
 
-func (tree *Rtree) String() string {
-	return "(H-Rtree)"
+func (tree *HRtree) String() string {
+	return "(HRtree)"
 }
 
 // node represents a tree node of the tree.
@@ -67,7 +67,7 @@ type node struct {
 	leaf        bool
 	entries     *entryList
 	lhv         uint64
-	bb          *Rect // bounding-box of all children of this entry
+	bb          *rectangle // bounding-box of all children of this entry
 }
 
 func newNode(min, max int) *node {
@@ -89,15 +89,15 @@ func (n *node) getEntries() []entry {
 // adjustLHV gets the largest Hilbert value among the node's entries
 func (n *node) adjustLHV() {
 	for _, en := range n.getEntries() {
-		if en.h > n.lhv {
-			n.lhv = en.h
+		if n.lhv < en.getLHV() {
+			n.lhv = en.getLHV()
 		}
 	}
 }
 
 // adjustMBR adjusts the bounding box of the node
 func (n *node) adjustMBR() {
-	var bb Rect
+	var bb rectangle
 	for i, e := range n.getEntries() {
 		if i == 0 {
 			bb = *e.getMBR()
@@ -109,12 +109,12 @@ func (n *node) adjustMBR() {
 	n.bb = &bb
 }
 
-func (n *node) isOverflow() bool {
+func (n *node) isOverflowing() bool {
 	return n.entries.len() == n.max
 }
 
-func (n *node) isUnderflow() bool {
-	return n.entries.len() < n.max
+func (n *node) isUnderflowing() bool {
+	return n.entries.len() <= n.min
 }
 
 func (n *node) getSiblings(siblingsNum int) []*node {
@@ -129,7 +129,7 @@ func (n *node) getSiblings(siblingsNum int) []*node {
 	return nodes
 }
 
-func (n *node) removeLeaf(obj Spatial) bool {
+func (n *node) removeLeaf(obj Rectangle) bool {
 	if !n.leaf {
 		panic("Cannot remove entry from nonleaf node.")
 	}
@@ -137,7 +137,7 @@ func (n *node) removeLeaf(obj Spatial) bool {
 	ind := -1
 	for i, en := range n.entries.getEntries() {
 
-		if en.obj.Bounds().equal(obj.Bounds()) {
+		if equal(en.obj, obj) {
 			ind = i
 		}
 	}
@@ -179,7 +179,7 @@ func (n *node) insertLeaf(e entry) {
 		panic("The current node is not a leaf node.")
 	}
 
-	if n.isOverflow() {
+	if n.isOverflowing() {
 		panic("The node is overflowing.")
 	}
 
@@ -192,13 +192,16 @@ func (n *node) insertNonLeaf(e entry) {
 		panic("The current node is a leaf node.")
 	}
 
-	if n.isOverflow() {
+	if n.isOverflowing() {
 		panic("The node is overflowing.")
 	}
 
 	it := n.entries.insert(e)
 
 	e.node.parent = n
+
+	assert(n.right == nil || (n.right != nil && n.leaf == n.right.leaf))
+	assert(n.left == nil || (n.left != nil && n.leaf == n.left.leaf))
 
 	var nextSib, prevSib *node
 
@@ -213,6 +216,7 @@ func (n *node) insertNonLeaf(e entry) {
 
 	if prevSib != nil {
 		prevSib.right = e.node
+		assert(e.node.leaf == prevSib.leaf)
 	}
 
 	aux := n.entries.len()
@@ -229,6 +233,7 @@ func (n *node) insertNonLeaf(e entry) {
 
 	if nextSib != nil {
 		nextSib.left = e.node
+		assert(e.node.leaf == nextSib.leaf)
 	}
 }
 
@@ -239,7 +244,7 @@ func (n *node) reset() {
 	n.lhv = 0
 }
 
-func (n *node) getMBR() *Rect {
+func (n *node) getMBR() *rectangle {
 	return n.bb
 }
 
@@ -247,9 +252,9 @@ func (n *node) getMBR() *Rect {
 // this is shared between non-leaf and leaf entries.
 // non-leaf has node, leaf has obj
 type entry struct {
-	bb   *Rect // bounding-box of of this entry
+	bb   *rectangle // bounding-box of of this entry
 	node *node
-	obj  Spatial
+	obj  Rectangle
 	h    uint64 // hilbert value
 	leaf bool
 }
@@ -261,11 +266,19 @@ func (e entry) String() string {
 	return fmt.Sprintf("entry{bb: %v, obj: %v, hilbert: %v}", e.bb, e.obj, e.h)
 }
 
-func (e entry) getMBR() *Rect {
+func (e entry) getMBR() *rectangle {
 	if e.leaf {
 		return e.bb
 	} else {
 		return e.node.bb
+	}
+}
+
+func (e entry) getLHV() uint64 {
+	if e.leaf {
+		return e.h
+	} else {
+		return 0
 	}
 }
 
@@ -289,7 +302,7 @@ func newListUncapped() *entryList {
 
 func (l *entryList) insert(el entry) int {
 
-	index := sort.Search(len(l.entries), func(i int) bool { return l.entries[i].h > el.h })
+	index := sort.Search(len(l.entries), func(i int) bool { return l.entries[i].getLHV() > el.getLHV() })
 	l.entries = append(l.entries, entry{})
 	copy(l.entries[index+1:], l.entries[index:])
 	l.entries[index] = el
@@ -317,31 +330,23 @@ func (l entryList) getEntries() []entry {
 	return l.entries
 }
 
-// Any type that implements Spatial can be stored in an Rtree and queried.
-type Spatial interface {
-	Bounds() *Rect
-	Center() Point
-}
-
 // Insert inserts a spatial object into the tree. Through Center(), we compute the hilbert value
-// from the uncollapsed 3-dimensional coordinates. Through Bounds(), we get to operate on the bounding box.
-func (tree *Rtree) Insert(obj Spatial) {
-	p := obj.Center()
+// from the uncollapsed n-dimensional coordinates.
+func (tree *HRtree) Insert(obj Rectangle) {
 
-	hv := tree.HilbertFunc.Encode(uint64(p[0]), uint64(p[1]))
-
-	e := entry{obj.Bounds(), nil, obj, hv.Uint64(), true}
+	hv := tree.hf.Encode(getCenter(obj)...)
+	e := entry{&rectangle{obj.LowerLeft(), obj.UpperRight()}, nil, obj, hv.Uint64(), true}
 	tree.insert(e)
 	tree.size++
 }
 
 // insert adds the specified entry to the tree at the specified level.
-func (tree *Rtree) insert(e entry) {
+func (tree *HRtree) insert(e entry) {
 	siblings := make([]*node, 0)
 	leaf := tree.chooseNode(tree.root, e.h)
 	var split *node
 
-	if !leaf.isOverflow() {
+	if !leaf.isOverflowing() {
 		leaf.insertLeaf(e)
 		leaf.adjustLHV()
 		leaf.adjustMBR()
@@ -358,7 +363,7 @@ func (tree *Rtree) insert(e entry) {
 }
 
 // chooseNode finds the node to which e should be added.
-func (tree *Rtree) chooseNode(n *node, h uint64) *node {
+func (tree *HRtree) chooseNode(n *node, h uint64) *node {
 	if n.leaf {
 		return n
 	}
@@ -366,12 +371,11 @@ func (tree *Rtree) chooseNode(n *node, h uint64) *node {
 	// choose the entry (R, ptr, LHV) with the minimum LHV value greater than h.
 	var last entry
 	for _, en := range n.getEntries() {
-		if !en.leaf {
-			if en.node.lhv >= h {
-				return tree.chooseNode(en.node, h)
-			}
-			last = en
+		assert(!en.leaf)
+		if en.node.lhv >= h {
+			return tree.chooseNode(en.node, h)
 		}
+		last = en
 	}
 
 	//if h is larger than all the LHV already in the node,
@@ -380,7 +384,7 @@ func (tree *Rtree) chooseNode(n *node, h uint64) *node {
 }
 
 // TO-DO..unify with adjustTreeForRemove
-func (tree *Rtree) adjustTreeForInsert(root, n, nn *node, siblings []*node) (newRoot *node) {
+func (tree *HRtree) adjustTreeForInsert(root, n, nn *node, siblings []*node) (newRoot *node) {
 	var pp *node
 	var ok bool = true
 
@@ -394,7 +398,7 @@ func (tree *Rtree) adjustTreeForInsert(root, n, nn *node, siblings []*node) (new
 		if np == nil {
 			ok = false
 			if nn != nil {
-				newRoot = newNode(tree.MinChildren, tree.MaxChildren)
+				newRoot = newNode(tree.min, tree.max)
 
 				newRoot.insertNonLeaf(entry{node: n})
 				newRoot.insertNonLeaf(entry{node: nn})
@@ -406,7 +410,7 @@ func (tree *Rtree) adjustTreeForInsert(root, n, nn *node, siblings []*node) (new
 		} else {
 			if nn != nil {
 				enn := entry{node: nn}
-				if !np.isOverflow() {
+				if !np.isOverflowing() {
 					np.insertNonLeaf(enn)
 					np.adjustLHV()
 					np.adjustMBR()
@@ -438,7 +442,7 @@ func (tree *Rtree) adjustTreeForInsert(root, n, nn *node, siblings []*node) (new
 }
 
 // TO-DO..unify with adjustTreeForInsert
-func (tree *Rtree) adjustTreeForRemove(n, nn *node, siblings []*node) {
+func (tree *HRtree) adjustTreeForRemove(n, nn *node, siblings []*node) {
 	var keepRunning bool = true
 
 	newSiblings := make([]*node, 0)
@@ -455,7 +459,7 @@ func (tree *Rtree) adjustTreeForRemove(n, nn *node, siblings []*node) {
 				mainEntry := n.entries.get(0).node
 				data := mainEntry.getEntries()
 				n.reset()
-				
+
 				if mainEntry.leaf {
 					n.leaf = true
 					for _, en := range data {
@@ -478,7 +482,7 @@ func (tree *Rtree) adjustTreeForRemove(n, nn *node, siblings []*node) {
 				dnParent := nn.parent
 				dnParent.removeNonLeaf(nn)
 
-				if dnParent.entries.len() < tree.MinChildren {
+				if dnParent.isUnderflowing() {
 					dpParent, newSiblings = tree.handleUnderflow(dnParent, newSiblings)
 				} else {
 					newSiblings = append(newSiblings, dnParent)
@@ -521,6 +525,7 @@ func handleOverflow(n *node, e entry, nodes []*node) (*node, []*node) {
 	entries.insert(e)
 
 	for i, node := range nodes {
+		assert(node.leaf == e.leaf)
 		for _, e := range node.getEntries() {
 			entries.insert(e)
 		}
@@ -539,6 +544,7 @@ func handleOverflow(n *node, e entry, nodes []*node) (*node, []*node) {
 		nn.left = prevSib
 
 		if prevSib != nil {
+			assert(prevSib.leaf == nn.leaf)
 			prevSib.right = nn
 		}
 
@@ -556,7 +562,7 @@ func handleOverflow(n *node, e entry, nodes []*node) (*node, []*node) {
 	return nn, nodes
 }
 
-func (tree *Rtree) handleUnderflow(target *node, nodes []*node) (*node, []*node) {
+func (tree *HRtree) handleUnderflow(target *node, nodes []*node) (*node, []*node) {
 
 	var nn *node
 
@@ -572,7 +578,7 @@ func (tree *Rtree) handleUnderflow(target *node, nodes []*node) (*node, []*node)
 		node.reset()
 	}
 
-	if entries.len() < len(nodes)*tree.MinChildren && target.parent != nil {
+	if entries.len() < len(nodes)*tree.min && target.parent != nil {
 		nn = nodes[0]
 		prevSib := nn.left
 		nextSib := nn.right
@@ -616,6 +622,7 @@ func redistributeEntries(entries *entryList, siblings []*node) {
 			if currentBatch == batchSize {
 				currentBatch = 0
 				j = i + 1
+
 				break
 			}
 		}
@@ -625,7 +632,7 @@ func redistributeEntries(entries *entryList, siblings []*node) {
 	}
 }
 
-func (tree *Rtree) Delete(obj Spatial) (ok bool) {
+func (tree *HRtree) Delete(obj Rectangle) (ok bool) {
 	leaf := tree.findLeaf(tree.root, obj)
 	if leaf == nil {
 		return
@@ -639,7 +646,7 @@ func (tree *Rtree) Delete(obj Spatial) (ok bool) {
 
 		tree.size--
 
-		if leaf.entries.len() < tree.MinChildren {
+		if leaf.isUnderflowing() {
 			dl, siblings = tree.handleUnderflow(leaf, siblings)
 		}
 
@@ -652,21 +659,21 @@ func (tree *Rtree) Delete(obj Spatial) (ok bool) {
 }
 
 // findLeaf finds the leaf node containing obj.
-func (tree *Rtree) findLeaf(n *node, obj Spatial) *node {
+func (tree *HRtree) findLeaf(n *node, obj Rectangle) *node {
 	if n.leaf {
 		return n
 	}
 	// if not leaf, search all candidate subtrees
 	for _, e := range n.getEntries() {
 
-		if e.getMBR().contains(obj.Bounds()) {
+		if e.getMBR().contains(obj) {
 			leaf := tree.findLeaf(e.node, obj)
 			if leaf == nil {
 				continue
 			}
 			// check if the leaf actually contains the object
 			for _, leafEntry := range leaf.getEntries() {
-				if leafEntry.obj.Bounds().equal(obj.Bounds()) {
+				if equal(leafEntry.obj, obj) {
 					return leaf
 				}
 			}
@@ -677,13 +684,13 @@ func (tree *Rtree) findLeaf(n *node, obj Spatial) *node {
 }
 
 // Searching
-// SearchIntersect returns all objects that intersect the specified rectangle.
-func (tree *Rtree) SearchIntersect(bb *Rect) []Spatial {
-	results := []Spatial{}
+// SearchIntersect returns all objects that intersects the specified rectangle.
+func (tree *HRtree) SearchIntersect(bb Rectangle) []Rectangle {
+	results := []Rectangle{}
 	return tree.searchIntersect(tree.root, bb, results)
 }
 
-func (tree *Rtree) searchIntersect(n *node, bb *Rect, results []Spatial) []Spatial {
+func (tree *HRtree) searchIntersect(n *node, bb Rectangle, results []Rectangle) []Rectangle {
 
 	for _, e := range n.getEntries() {
 
@@ -696,133 +703,4 @@ func (tree *Rtree) searchIntersect(n *node, bb *Rect, results []Spatial) []Spati
 		}
 	}
 	return results
-}
-
-// NearestNeighbor returns the closest object to the specified point.
-func (tree *Rtree) NearestNeighbor(p Point) Spatial {
-	obj, _ := tree.nearestNeighbor(p, tree.root, math.MaxFloat64, nil)
-	return obj
-}
-
-// utilities for sorting slices of entries
-type entrySlice struct {
-	entries []entry
-	dists   []float64
-	pt      Point
-}
-
-func (s entrySlice) Len() int { return len(s.entries) }
-
-func (s entrySlice) Swap(i, j int) {
-	s.entries[i], s.entries[j] = s.entries[j], s.entries[i]
-	s.dists[i], s.dists[j] = s.dists[j], s.dists[i]
-}
-
-func (s entrySlice) Less(i, j int) bool {
-	return s.dists[i] < s.dists[j]
-}
-
-func sortEntries(p Point, entries []entry) ([]entry, []float64) {
-	sorted := make([]entry, len(entries))
-	dists := make([]float64, len(entries))
-	for i := 0; i < len(entries); i++ {
-		sorted[i] = entries[i]
-		dists[i] = p.minDist(entries[i].bb)
-	}
-	sort.Sort(entrySlice{sorted, dists, p})
-	return sorted, dists
-}
-
-func pruneEntries(p Point, entries []entry, minDists []float64) []entry {
-	minMinMaxDist := math.MaxFloat64
-	for i := range entries {
-		minMaxDist := p.minMaxDist(entries[i].bb)
-		if minMaxDist < minMinMaxDist {
-			minMinMaxDist = minMaxDist
-		}
-	}
-	// remove all entries with minDist > minMinMaxDist
-	pruned := []entry{}
-	for i := range entries {
-		if minDists[i] <= minMinMaxDist {
-			pruned = append(pruned, entries[i])
-		}
-	}
-	return pruned
-}
-
-func (tree *Rtree) nearestNeighbor(p Point, n *node, d float64, nearest Spatial) (Spatial, float64) {
-	if n.leaf {
-		for _, e := range n.getEntries() {
-			dist := math.Sqrt(p.minDist(e.bb))
-			if dist < d {
-				d = dist
-				nearest = e.obj
-			}
-		}
-	} else {
-		branches, dists := sortEntries(p, n.getEntries())
-		branches = pruneEntries(p, branches, dists)
-		for _, e := range branches {
-			subNearest, dist := tree.nearestNeighbor(p, e.node, d, nearest)
-			if dist < d {
-				d = dist
-				nearest = subNearest
-			}
-		}
-	}
-
-	return nearest, d
-}
-
-func (tree *Rtree) NearestNeighbors(k int, p Point) []Spatial {
-	dists := make([]float64, k)
-	objs := make([]Spatial, k)
-	for i := 0; i < k; i++ {
-		dists[i] = math.MaxFloat64
-		objs[i] = nil
-	}
-	objs, _ = tree.nearestNeighbors(k, p, tree.root, dists, objs)
-	return objs
-}
-
-// insert obj into nearest and return the first k elements in increasing order.
-func insertNearest(k int, dists []float64, nearest []Spatial, dist float64, obj Spatial) ([]float64, []Spatial) {
-	i := 0
-	for i < k && dist >= dists[i] {
-		i++
-	}
-	if i >= k {
-		return dists, nearest
-	}
-
-	left, right := dists[:i], dists[i:k-1]
-	updatedDists := make([]float64, k)
-	copy(updatedDists, left)
-	updatedDists[i] = dist
-	copy(updatedDists[i+1:], right)
-
-	leftObjs, rightObjs := nearest[:i], nearest[i:k-1]
-	updatedNearest := make([]Spatial, k)
-	copy(updatedNearest, leftObjs)
-	updatedNearest[i] = obj
-	copy(updatedNearest[i+1:], rightObjs)
-
-	return updatedDists, updatedNearest
-}
-
-func (tree *Rtree) nearestNeighbors(k int, p Point, n *node, dists []float64, nearest []Spatial) ([]Spatial, []float64) {
-	if n.leaf {
-		for _, e := range n.getEntries() {
-			dist := math.Sqrt(p.minDist(e.bb))
-			dists, nearest = insertNearest(k, dists, nearest, dist, e.obj)
-		}
-	} else {
-		branches, branchDists := sortEntries(p, n.getEntries())
-		branches = pruneEntries(p, branches, branchDists)
-		for _, e := range branches {
-			nearest, dists = tree.nearestNeighbors(k, p, e.node, dists, nearest)
-		}
-	}
-	return nearest, dists
 }

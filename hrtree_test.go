@@ -8,16 +8,16 @@ import (
 
 var hf, _ = h.New(uint32(5), 2)
 
-func (r *Rect) Bounds() *Rect {
-	return r
+func (r *rectangle) LowerLeft() Point {
+	return r.lowerLeft
 }
 
-func (r *Rect) Center() Point {
-	return r.ToCenter()
+func (r *rectangle) UpperRight() Point {
+	return r.upperRight
 }
 
-func rect(lower, upper Point) *Rect {
-	r, err := NewRect(lower, upper)
+func rect(lower, upper Point) *rectangle {
+	r, err := newRect(lower, upper)
 
 	if err != nil {
 		fmt.Println(err)
@@ -25,7 +25,7 @@ func rect(lower, upper Point) *Rect {
 	return &r
 }
 
-func index(objs []Spatial, obj Spatial) int {
+func index(objs []Rectangle, obj Rectangle) int {
 	ind := -1
 	for i, r := range objs {
 		if r == obj {
@@ -40,24 +40,20 @@ func TestChooseNode(t *testing.T) {
 	rt, _ := NewTree(DefaultMinNodeEntries, DefaultMaxNodeEntries, 5)
 
 	rect1 := rect(Point{2, 1}, Point{2, 1})
-	c1 := rect1.Center()
-	h1 := hf.Encode(uint64(c1[0]), uint64(c1[1]))
+	h1 := hf.Encode(getCenter(rect1)...)
 
 	rect2 := rect(Point{2, 2}, Point{2, 2})
-	c2 := rect2.Center()
-	h2 := hf.Encode(uint64(c2[0]), uint64(c2[1]))
+	h2 := hf.Encode(getCenter(rect2)...)
 
 	rect3 := rect(Point{2, 3}, Point{2, 3})
-	c3 := rect3.Center()
-	h3 := hf.Encode(uint64(c3[0]), uint64(c3[1]))
+	h3 := hf.Encode(getCenter(rect3)...)
 
 	rect4 := rect(Point{2, 4}, Point{2, 4})
-	c4 := rect4.Center()
-	h4 := hf.Encode(uint64(c4[0]), uint64(c4[1]))
+	h4 := hf.Encode(getCenter(rect4)...)
 
-	l1 := entry{bb: rect1.Bounds(), obj: rect1, h: h2.Uint64(), leaf: true}
-	l2 := entry{bb: rect2.Bounds(), obj: rect2, h: h3.Uint64(), leaf: true}
-	l3 := entry{bb: rect3.Bounds(), obj: rect3, h: h4.Uint64(), leaf: true}
+	l1 := entry{bb: rect1, obj: rect1, h: h2.Uint64(), leaf: true}
+	l2 := entry{bb: rect2, obj: rect2, h: h3.Uint64(), leaf: true}
+	l3 := entry{bb: rect3, obj: rect3, h: h4.Uint64(), leaf: true}
 
 	leaf := newNode(DefaultMinNodeEntries, DefaultMaxNodeEntries)
 	leaf.leaf = true
@@ -122,9 +118,8 @@ func TestInsertNonLeafEntrySiblings(t *testing.T) {
 	childNode := newNode(2, 4)
 	childNode.leaf = true
 	rect := rect(Point{2, 2}, Point{2, 4})
-	c := rect.Center()
-	h := hf.Encode(uint64(c[0]), uint64(c[1]))
-	leafEntry := entry{bb: rect.Bounds(), obj: rect, h: h.Uint64(), leaf: true}
+	h := hf.Encode(getCenter(rect)...)
+	leafEntry := entry{bb: rect, obj: rect, h: h.Uint64(), leaf: true}
 	childNode.insertLeaf(leafEntry)
 
 	nonLeafEntry := entry{node: childNode}
@@ -150,46 +145,44 @@ func TestInsertNonLeafEntrySiblings(t *testing.T) {
 
 func TestNodeOverflowing(t *testing.T) {
 	rect := rect(Point{2, 2}, Point{2, 4})
-	c := rect.Center()
-	h := hf.Encode(uint64(c[0]), uint64(c[1]))
+	h := hf.Encode(getCenter(rect)...)
 
-	leafEntry := entry{bb: rect.Bounds(), obj: rect, h: h.Uint64(), leaf: true}
-	leafEntry2 := entry{bb: rect.Bounds(), obj: rect, h: h.Uint64(), leaf: true}
+	leafEntry := entry{bb: rect, obj: rect, h: h.Uint64(), leaf: true}
+	leafEntry2 := entry{bb: rect, obj: rect, h: h.Uint64(), leaf: true}
 
 	n := newNode(1, 2)
 	n.leaf = true
 
-	if n.isOverflow() {
+	if n.isOverflowing() {
 		t.Errorf("should not be overflowing")
 	}
 
 	n.insertLeaf(leafEntry)
 	n.insertLeaf(leafEntry2)
 
-	if !n.isOverflow() {
+	if !n.isOverflowing() {
 		t.Errorf("should be overflowing")
 	}
 }
 
 func TestNodeUnderflowing(t *testing.T) {
 	rect := rect(Point{2, 2}, Point{2, 4})
-	c := rect.Center()
-	h := hf.Encode(uint64(c[0]), uint64(c[1]))
+	h := hf.Encode(getCenter(rect)...)
 
-	leafEntry := entry{bb: rect.Bounds(), obj: rect, h: h.Uint64(), leaf: true}
-	leafEntry2 := entry{bb: rect.Bounds(), obj: rect, h: h.Uint64(), leaf: true}
+	leafEntry := entry{bb: rect, obj: rect, h: h.Uint64(), leaf: true}
+	leafEntry2 := entry{bb: rect, obj: rect, h: h.Uint64(), leaf: true}
 
 	n := newNode(1, 2)
 	n.leaf = true
 
-	if !n.isUnderflow() {
+	if !n.isUnderflowing() {
 		t.Errorf("should not be overflowing")
 	}
 
 	n.insertLeaf(leafEntry)
 	n.insertLeaf(leafEntry2)
 
-	if n.isUnderflow() {
+	if n.isUnderflowing() {
 		t.Errorf("should be overflowing")
 	}
 
@@ -197,19 +190,16 @@ func TestNodeUnderflowing(t *testing.T) {
 
 func TestAdjustMBR(t *testing.T) {
 	rect1 := rect(Point{2, 0}, Point{2, 4})
-	c1 := rect1.Center()
-	h1 := hf.Encode(uint64(c1[0]), uint64(c1[1]))
-	leafEntry1 := entry{bb: rect1.Bounds(), obj: rect1, h: h1.Uint64(), leaf: true}
+	h1 := hf.Encode(getCenter(rect1)...)
+	leafEntry1 := entry{bb: rect1, obj: rect1, h: h1.Uint64(), leaf: true}
 
 	rect2 := rect(Point{2, 1}, Point{2, 5})
-	c2 := rect2.Center()
-	h2 := hf.Encode(uint64(c2[0]), uint64(c2[1]))
-	leafEntry2 := entry{bb: rect2.Bounds(), obj: rect2, h: h2.Uint64(), leaf: true}
+	h2 := hf.Encode(getCenter(rect2)...)
+	leafEntry2 := entry{bb: rect2, obj: rect2, h: h2.Uint64(), leaf: true}
 
 	rect3 := rect(Point{2, 5}, Point{2, 10})
-	c3 := rect3.Center()
-	h3 := hf.Encode(uint64(c3[0]), uint64(c3[1]))
-	leafEntry3 := entry{bb: rect3.Bounds(), obj: rect3, h: h3.Uint64(), leaf: true}
+	h3 := hf.Encode(getCenter(rect3)...)
+	leafEntry3 := entry{bb: rect3, obj: rect3, h: h3.Uint64(), leaf: true}
 
 	n := newNode(2, 4)
 	n.leaf = true
@@ -219,19 +209,19 @@ func TestAdjustMBR(t *testing.T) {
 	n.adjustMBR()
 	r := n.getMBR()
 
-	if 2 != r.lower[0] {
+	if 2 != r.lowerLeft[0] {
 		t.Errorf("incorrect lower[x]")
 	}
 
-	if 0 != r.lower[1] {
+	if 0 != r.lowerLeft[1] {
 		t.Errorf("incorrect lower[y]")
 	}
 
-	if 2 != r.upper[0] {
+	if 2 != r.upperRight[0] {
 		t.Errorf("incorrect upper[x]")
 	}
 
-	if 5 != r.upper[1] {
+	if 5 != r.upperRight[1] {
 		t.Errorf("incorrect upper[y]")
 	}
 
@@ -243,19 +233,19 @@ func TestAdjustMBR(t *testing.T) {
 
 	r1 := n1.getMBR()
 
-	if 2 != r1.lower[0] {
+	if 2 != r1.lowerLeft[0] {
 		t.Errorf("incorrect lower[x]")
 	}
 
-	if 0 != r1.lower[1] {
+	if 0 != r1.lowerLeft[1] {
 		t.Errorf("incorrect lower[y]")
 	}
 
-	if 2 != r1.upper[0] {
+	if 2 != r1.upperRight[0] {
 		t.Errorf("incorrect upper[x]")
 	}
 
-	if 10 != r1.upper[1] {
+	if 10 != r1.upperRight[1] {
 		t.Errorf("incorrect upper[y]")
 	}
 
@@ -263,18 +253,14 @@ func TestAdjustMBR(t *testing.T) {
 
 func TestAdjustMBR2(t *testing.T) {
 	rect1 := rect(Point{2, 2}, Point{2, 3})
+	h1 := hf.Encode(getCenter(rect1)...)
 
-	c1 := rect1.Center()
-	h1 := hf.Encode(uint64(c1[0]), uint64(c1[1]))
-
-	leafEntry1 := entry{bb: rect1.Bounds(), obj: rect1, h: h1.Uint64(), leaf: true}
+	leafEntry1 := entry{bb: rect1, obj: rect1, h: h1.Uint64(), leaf: true}
 
 	rect2 := rect(Point{2, 8}, Point{2, 8})
+	h2 := hf.Encode(getCenter(rect2)...)
 
-	c2 := rect2.Center()
-	h2 := hf.Encode(uint64(c2[0]), uint64(c2[1]))
-
-	leafEntry2 := entry{bb: rect2.Bounds(), obj: rect2, h: h2.Uint64(), leaf: true}
+	leafEntry2 := entry{bb: rect2, obj: rect2, h: h2.Uint64(), leaf: true}
 
 	n := newNode(2, 4)
 	n.leaf = true
@@ -283,19 +269,19 @@ func TestAdjustMBR2(t *testing.T) {
 	n.adjustMBR()
 	r := n.getMBR()
 
-	if 2 != r.lower[0] {
+	if 2 != r.lowerLeft[0] {
 		t.Errorf("incorrect upper[y]")
 	}
 
-	if 2 != r.lower[1] {
+	if 2 != r.lowerLeft[1] {
 		t.Errorf("incorrect upper[y]")
 	}
 
-	if 2 != r.upper[0] {
+	if 2 != r.upperRight[0] {
 		t.Errorf("incorrect upper[y]")
 	}
 
-	if 8 != r.upper[1] {
+	if 8 != r.upperRight[1] {
 		t.Errorf("incorrect upper[y]")
 	}
 
@@ -303,14 +289,12 @@ func TestAdjustMBR2(t *testing.T) {
 
 func TestAdjustLHV(t *testing.T) {
 	rect1 := rect(Point{2, 0}, Point{2, 0})
-	c1 := rect1.Center()
-	h1 := hf.Encode(uint64(c1[0]), uint64(c1[1]))
-	leafEntry1 := entry{bb: rect1.Bounds(), obj: rect1, h: h1.Uint64(), leaf: true}
+	h1 := hf.Encode(getCenter(rect1)...)
+	leafEntry1 := entry{bb: rect1, obj: rect1, h: h1.Uint64(), leaf: true}
 
 	rect2 := rect(Point{2, 0}, Point{2, 2})
-	c2 := rect2.Center()
-	h2 := hf.Encode(uint64(c2[0]), uint64(c2[1]))
-	leafEntry2 := entry{bb: rect2.Bounds(), obj: rect2, h: h2.Uint64(), leaf: true}
+	h2 := hf.Encode(getCenter(rect2)...)
+	leafEntry2 := entry{bb: rect2, obj: rect2, h: h2.Uint64(), leaf: true}
 
 	n := newNode(2, 4)
 	n.leaf = true
@@ -380,17 +364,15 @@ func TestHandleOverflow(t *testing.T) {
 	hf2, _ := h.New(uint32(5), 32)
 
 	for i := 0; i < DefaultMaxNodeEntries; i++ {
-		rect := rect(Point{2, float64(i)}, Point{2, float64(i)})
-		c := rect.Center()
-		h := hf2.Encode(uint64(c[0]), uint64(c[1]))
-		entry := entry{bb: rect.Bounds(), obj: rect, h: h.Uint64(), leaf: true}
+		rect := rect(Point{2, uint64(i)}, Point{2, uint64(i)})
+		h := hf2.Encode(getCenter(rect)...)
+		entry := entry{bb: rect, obj: rect, h: h.Uint64(), leaf: true}
 		node1.insertLeaf(entry)
 	}
 
 	rect2 := rect(Point{2, 0}, Point{2, 0})
-	c2 := rect2.Center()
-	h2 := hf2.Encode(uint64(c2[0]), uint64(c2[1]))
-	entry2 := entry{bb: rect2.Bounds(), obj: rect2, h: h2.Uint64(), leaf: true}
+	h2 := hf2.Encode(getCenter(rect2)...)
+	entry2 := entry{bb: rect2, obj: rect2, h: h2.Uint64(), leaf: true}
 
 	node2, _ := handleOverflow(node1, entry2, siblings)
 
@@ -422,7 +404,7 @@ func TestHandleOverflow(t *testing.T) {
 
 func TestSearchIntersect(t *testing.T) {
 	rt, _ := NewTree(3, 3, 12)
-	things := []*Rect{
+	things := []Rectangle{
 		rect(Point{0, 0}, Point{2, 1}),
 		rect(Point{3, 1}, Point{4, 3}),
 		rect(Point{1, 2}, Point{3, 4}),
@@ -439,10 +421,10 @@ func TestSearchIntersect(t *testing.T) {
 		rt.Insert(thing)
 	}
 
-	bb := rect(Point{2, 1.5}, Point{12, 7})
+	bb := rect(Point{2, 1}, Point{12, 7})
 	q := rt.SearchIntersect(bb)
 
-	expected := []int{1, 2, 3, 4, 5, 6, 7}
+	expected := []int{0, 1, 2, 3, 4, 5, 6, 7}
 
 	if len(q) != len(expected) {
 		t.Errorf("SearchIntersect failed to find all objects")
@@ -521,12 +503,12 @@ func TestDeleteAtMax(t *testing.T) {
 	rt, _ := NewTree(DefaultMinNodeEntries, DefaultMaxNodeEntries, 12)
 
 	for i := 0; i < DefaultMaxNodeEntries; i++ {
-		r := rect(Point{2, float64(i)}, Point{2, float64(i)})
+		r := rect(Point{2, uint64(i)}, Point{2, uint64(i)})
 		rt.Insert(r)
 	}
 
 	for i := 0; i < (DefaultMaxNodeEntries - DefaultMinNodeEntries); i++ {
-		r2 := rect(Point{2, float64(i)}, Point{2, float64(i)})
+		r2 := rect(Point{2, uint64(i)}, Point{2, uint64(i)})
 		rt.Delete(r2)
 	}
 
@@ -545,12 +527,12 @@ func TestDeleteAtMax2(t *testing.T) {
 	rt, _ := NewTree(DefaultMinNodeEntries, DefaultMaxNodeEntries, 12)
 
 	for i := 0; i < nodeNo; i++ {
-		r := rect(Point{2, float64(i)}, Point{2, float64(i)})
+		r := rect(Point{2, uint64(i)}, Point{2, uint64(i)})
 		rt.Insert(r)
 	}
 
 	for i := 0; i < nodeNo; i++ {
-		r2 := rect(Point{2, float64(i)}, Point{2, float64(i)})
+		r2 := rect(Point{2, uint64(i)}, Point{2, uint64(i)})
 		rt.Delete(r2)
 	}
 
@@ -577,9 +559,9 @@ func TestRedistributeEntries(t *testing.T) {
 
 	for i := 0; i < DefaultMaxNodeEntries*2-1; i++ {
 		rect := rect(Point{2, 1}, Point{2, 1})
-		c := rect.Center()
-		h := hf.Encode(uint64(c[0]), uint64(c[1]))
-		leafEntry := entry{bb: rect.Bounds(), obj: rect, h: h.Uint64(), leaf: true}
+
+		h := hf.Encode(getCenter(rect)...)
+		leafEntry := entry{bb: rect, obj: rect, h: h.Uint64(), leaf: true}
 		entries.insert(leafEntry)
 	}
 
@@ -596,7 +578,7 @@ func TestRedistributeEntries(t *testing.T) {
 
 func TestSearchIntersectNoResult(t *testing.T) {
 	rt, _ := NewTree(3, 3, 12)
-	things := []*Rect{
+	things := []Rectangle{
 		rect(Point{0, 0}, Point{2, 1}),
 		rect(Point{3, 1}, Point{4, 3}),
 		rect(Point{1, 2}, Point{3, 4}),
@@ -613,41 +595,17 @@ func TestSearchIntersectNoResult(t *testing.T) {
 		rt.Insert(thing)
 	}
 
-	bb := rect(Point{99, 99}, Point{109, 94.5})
+	bb := rect(Point{99, 99}, Point{109, 94})
 	q := rt.SearchIntersect(bb)
 	if len(q) != 0 {
 		t.Errorf("SearchIntersect failed to return nil slice on failing query")
 	}
 }
 
-func TestNearestNeighbor(t *testing.T) {
-	rt, _ := NewTree(3, DefaultMaxNodeEntries, 5)
-	things := []*Rect{
-		rect(Point{1, 1}, Point{2, 2}),
-		rect(Point{1, 3}, Point{2, 4}),
-		rect(Point{3, 2}, Point{4, 3}),
-		rect(Point{-7, -7}, Point{-6, -6}),
-		rect(Point{7, 7}, Point{8, 8}),
-		rect(Point{10, 2}, Point{11, 3}),
-	}
-	for _, thing := range things {
-		rt.Insert(thing)
-	}
-
-	obj1 := rt.NearestNeighbor(Point{0.5, 0.5})
-	obj2 := rt.NearestNeighbor(Point{1.5, 4.5})
-	obj3 := rt.NearestNeighbor(Point{5, 2.5})
-	obj4 := rt.NearestNeighbor(Point{3.5, 2.5})
-
-	if obj1 != things[0] || obj2 != things[1] || obj3 != things[2] || obj4 != things[2] {
-		t.Errorf("NearestNeighbor failed")
-	}
-}
-
 func BenchmarkGetIntersect(b *testing.B) {
 	b.StopTimer()
 	rt, _ := NewTree(3, 3, 12)
-	things := []*Rect{
+	things := []Rectangle{
 		rect(Point{0, 0}, Point{2, 1}),
 		rect(Point{3, 1}, Point{4, 3}),
 		rect(Point{1, 2}, Point{3, 4}),
@@ -663,7 +621,7 @@ func BenchmarkGetIntersect(b *testing.B) {
 		rt.Insert(thing)
 	}
 
-	bb := rect(Point{2, 1.5}, Point{12, 7})
+	bb := rect(Point{2, 1}, Point{12, 7})
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		rt.SearchIntersect(bb)
@@ -673,7 +631,7 @@ func BenchmarkGetIntersect(b *testing.B) {
 func BenchmarkInsert(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		rt, _ := NewTree(3, DefaultMaxNodeEntries, 5)
-		things := []*Rect{
+		things := []Rectangle{
 			rect(Point{0, 0}, Point{2, 1}),
 			rect(Point{3, 1}, Point{4, 3}),
 			rect(Point{1, 2}, Point{3, 4}),
