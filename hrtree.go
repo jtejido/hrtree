@@ -1,9 +1,11 @@
 package hrtree
 
 import (
+	"errors"
 	"fmt"
 	h "github.com/jtejido/hilbert"
 	"math"
+	"math/big"
 	"sort"
 )
 
@@ -14,6 +16,8 @@ const (
 	SiblingsNumber        = 2  // minimum number of cooperating siblings used for moving entries before split is considered
 	DefaultResolution     = 32 // minimum resolution required for hilbert computation's resolution
 )
+
+var ErrMinGTMax = errors.New("Minimum number of nodes should be less than Maximum number of nodes and not vice versa.")
 
 // HRtree represents a Hilbert R-tree, a balanced search tree for storing and querying
 // spatial objects.  MinChildren/MaxChildren specify the minimum/maximum branching factors.
@@ -41,7 +45,7 @@ func NewTree(min, max, bits int) (*HRtree, error) {
 	}
 
 	if max < min {
-		max++
+		return nil, ErrMinGTMax
 	}
 
 	rt := HRtree{min: min, max: max, bits: bits, hf: hf}
@@ -66,7 +70,7 @@ type node struct {
 	left, right *node
 	leaf        bool
 	entries     *entryList
-	lhv         uint64
+	lhv         *big.Int
 	bb          *rectangle // bounding-box of all children of this entry
 }
 
@@ -74,6 +78,7 @@ func newNode(min, max int) *node {
 	return &node{
 		min:     min,
 		max:     max,
+		lhv: 	 big.NewInt(0),
 		entries: newList(max),
 	}
 }
@@ -89,7 +94,8 @@ func (n *node) getEntries() []entry {
 // adjustLHV gets the largest Hilbert value among the node's entries
 func (n *node) adjustLHV() {
 	for _, en := range n.getEntries() {
-		if n.lhv < en.getLHV() {
+
+		if n.lhv.Cmp(en.getLHV()) < 0 {
 			n.lhv = en.getLHV()
 		}
 	}
@@ -241,7 +247,7 @@ func (n *node) insertNonLeaf(e entry) {
 func (n *node) reset() {
 	n.entries = newList(n.max)
 	n.bb = nil
-	n.lhv = 0
+	n.lhv = big.NewInt(0)
 }
 
 func (n *node) getMBR() *rectangle {
@@ -255,7 +261,7 @@ type entry struct {
 	bb   *rectangle // bounding-box of of this entry
 	node *node
 	obj  Rectangle
-	h    uint64 // hilbert value
+	h    *big.Int // hilbert value
 	leaf bool
 }
 
@@ -274,11 +280,11 @@ func (e entry) getMBR() *rectangle {
 	}
 }
 
-func (e entry) getLHV() uint64 {
+func (e entry) getLHV() *big.Int {
 	if e.leaf {
 		return e.h
 	} else {
-		return 0
+		return big.NewInt(0)
 	}
 }
 
@@ -302,7 +308,7 @@ func newListUncapped() *entryList {
 
 func (l *entryList) insert(el entry) int {
 
-	index := sort.Search(len(l.entries), func(i int) bool { return l.entries[i].getLHV() > el.getLHV() })
+	index := sort.Search(len(l.entries), func(i int) bool { return l.entries[i].getLHV().Cmp(el.getLHV()) ==1 })
 	l.entries = append(l.entries, entry{})
 	copy(l.entries[index+1:], l.entries[index:])
 	l.entries[index] = el
@@ -335,7 +341,7 @@ func (l entryList) getEntries() []entry {
 func (tree *HRtree) Insert(obj Rectangle) {
 
 	hv := tree.hf.Encode(getCenter(obj)...)
-	e := entry{&rectangle{obj.LowerLeft(), obj.UpperRight()}, nil, obj, hv.Uint64(), true}
+	e := entry{&rectangle{obj.LowerLeft(), obj.UpperRight()}, nil, obj, hv, true}
 	tree.insert(e)
 	tree.size++
 }
@@ -363,7 +369,7 @@ func (tree *HRtree) insert(e entry) {
 }
 
 // chooseNode finds the node to which e should be added.
-func (tree *HRtree) chooseNode(n *node, h uint64) *node {
+func (tree *HRtree) chooseNode(n *node, h *big.Int) *node {
 	if n.leaf {
 		return n
 	}
@@ -372,7 +378,7 @@ func (tree *HRtree) chooseNode(n *node, h uint64) *node {
 	var last entry
 	for _, en := range n.getEntries() {
 		assert(!en.leaf)
-		if en.node.lhv >= h {
+		if en.node.lhv.Cmp(h) >= 0 {
 			return tree.chooseNode(en.node, h)
 		}
 		last = en

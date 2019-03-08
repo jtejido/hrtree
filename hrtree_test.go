@@ -51,14 +51,14 @@ func TestChooseNode(t *testing.T) {
 	rect4 := rect(Point{2, 4}, Point{2, 4})
 	h4 := hf.Encode(getCenter(rect4)...)
 
-	l1 := entry{bb: rect1, obj: rect1, h: h2.Uint64(), leaf: true}
-	l2 := entry{bb: rect2, obj: rect2, h: h3.Uint64(), leaf: true}
-	l3 := entry{bb: rect3, obj: rect3, h: h4.Uint64(), leaf: true}
+	l1 := entry{bb: rect1, obj: rect1, h: h2, leaf: true}
+	l2 := entry{bb: rect2, obj: rect2, h: h3, leaf: true}
+	l3 := entry{bb: rect3, obj: rect3, h: h4, leaf: true}
 
 	leaf := newNode(DefaultMinNodeEntries, DefaultMaxNodeEntries)
 	leaf.leaf = true
 
-	if leaf := rt.chooseNode(rt.root, h1.Uint64()); leaf != rt.root {
+	if leaf := rt.chooseNode(rt.root, h1); leaf != rt.root {
 		t.Errorf("expected chooseNode of empty tree to return root")
 	}
 
@@ -89,7 +89,7 @@ func TestChooseNode(t *testing.T) {
 	nonLeaf.insertNonLeaf(entry2)
 	nonLeaf.insertNonLeaf(entry1)
 
-	if childNode3 != rt.chooseNode(nonLeaf, h2.Uint64()) {
+	if childNode3 != rt.chooseNode(nonLeaf, h2) {
 		t.Errorf("incorrect chooseNode")
 	}
 
@@ -119,7 +119,7 @@ func TestInsertNonLeafEntrySiblings(t *testing.T) {
 	childNode.leaf = true
 	rect := rect(Point{2, 2}, Point{2, 4})
 	h := hf.Encode(getCenter(rect)...)
-	leafEntry := entry{bb: rect, obj: rect, h: h.Uint64(), leaf: true}
+	leafEntry := entry{bb: rect, obj: rect, h: h, leaf: true}
 	childNode.insertLeaf(leafEntry)
 
 	nonLeafEntry := entry{node: childNode}
@@ -147,8 +147,8 @@ func TestNodeOverflowing(t *testing.T) {
 	rect := rect(Point{2, 2}, Point{2, 4})
 	h := hf.Encode(getCenter(rect)...)
 
-	leafEntry := entry{bb: rect, obj: rect, h: h.Uint64(), leaf: true}
-	leafEntry2 := entry{bb: rect, obj: rect, h: h.Uint64(), leaf: true}
+	leafEntry := entry{bb: rect, obj: rect, h: h, leaf: true}
+	leafEntry2 := entry{bb: rect, obj: rect, h: h, leaf: true}
 
 	n := newNode(1, 2)
 	n.leaf = true
@@ -169,8 +169,8 @@ func TestNodeUnderflowing(t *testing.T) {
 	rect := rect(Point{2, 2}, Point{2, 4})
 	h := hf.Encode(getCenter(rect)...)
 
-	leafEntry := entry{bb: rect, obj: rect, h: h.Uint64(), leaf: true}
-	leafEntry2 := entry{bb: rect, obj: rect, h: h.Uint64(), leaf: true}
+	leafEntry := entry{bb: rect, obj: rect, h: h, leaf: true}
+	leafEntry2 := entry{bb: rect, obj: rect, h: h, leaf: true}
 
 	n := newNode(1, 2)
 	n.leaf = true
@@ -191,15 +191,15 @@ func TestNodeUnderflowing(t *testing.T) {
 func TestAdjustMBR(t *testing.T) {
 	rect1 := rect(Point{2, 0}, Point{2, 4})
 	h1 := hf.Encode(getCenter(rect1)...)
-	leafEntry1 := entry{bb: rect1, obj: rect1, h: h1.Uint64(), leaf: true}
+	leafEntry1 := entry{bb: rect1, obj: rect1, h: h1, leaf: true}
 
 	rect2 := rect(Point{2, 1}, Point{2, 5})
 	h2 := hf.Encode(getCenter(rect2)...)
-	leafEntry2 := entry{bb: rect2, obj: rect2, h: h2.Uint64(), leaf: true}
+	leafEntry2 := entry{bb: rect2, obj: rect2, h: h2, leaf: true}
 
 	rect3 := rect(Point{2, 5}, Point{2, 10})
 	h3 := hf.Encode(getCenter(rect3)...)
-	leafEntry3 := entry{bb: rect3, obj: rect3, h: h3.Uint64(), leaf: true}
+	leafEntry3 := entry{bb: rect3, obj: rect3, h: h3, leaf: true}
 
 	n := newNode(2, 4)
 	n.leaf = true
@@ -255,12 +255,12 @@ func TestAdjustMBR2(t *testing.T) {
 	rect1 := rect(Point{2, 2}, Point{2, 3})
 	h1 := hf.Encode(getCenter(rect1)...)
 
-	leafEntry1 := entry{bb: rect1, obj: rect1, h: h1.Uint64(), leaf: true}
+	leafEntry1 := entry{bb: rect1, obj: rect1, h: h1, leaf: true}
 
 	rect2 := rect(Point{2, 8}, Point{2, 8})
 	h2 := hf.Encode(getCenter(rect2)...)
 
-	leafEntry2 := entry{bb: rect2, obj: rect2, h: h2.Uint64(), leaf: true}
+	leafEntry2 := entry{bb: rect2, obj: rect2, h: h2, leaf: true}
 
 	n := newNode(2, 4)
 	n.leaf = true
@@ -290,11 +290,11 @@ func TestAdjustMBR2(t *testing.T) {
 func TestAdjustLHV(t *testing.T) {
 	rect1 := rect(Point{2, 0}, Point{2, 0})
 	h1 := hf.Encode(getCenter(rect1)...)
-	leafEntry1 := entry{bb: rect1, obj: rect1, h: h1.Uint64(), leaf: true}
+	leafEntry1 := entry{bb: rect1, obj: rect1, h: h1, leaf: true}
 
 	rect2 := rect(Point{2, 0}, Point{2, 2})
 	h2 := hf.Encode(getCenter(rect2)...)
-	leafEntry2 := entry{bb: rect2, obj: rect2, h: h2.Uint64(), leaf: true}
+	leafEntry2 := entry{bb: rect2, obj: rect2, h: h2, leaf: true}
 
 	n := newNode(2, 4)
 	n.leaf = true
@@ -303,11 +303,11 @@ func TestAdjustLHV(t *testing.T) {
 
 	n.adjustLHV()
 
-	if h1.Uint64() >= h2.Uint64() {
+	if h1.Cmp(h2) >= 0 {
 		t.Errorf("incorrect hilbert value")
 	}
 
-	if h2.Uint64() != n.lhv {
+	if h2.Cmp(n.lhv) != 0 {
 		t.Errorf("incorrect hilbert value")
 	}
 }
@@ -366,13 +366,13 @@ func TestHandleOverflow(t *testing.T) {
 	for i := 0; i < DefaultMaxNodeEntries; i++ {
 		rect := rect(Point{2, uint64(i)}, Point{2, uint64(i)})
 		h := hf2.Encode(getCenter(rect)...)
-		entry := entry{bb: rect, obj: rect, h: h.Uint64(), leaf: true}
+		entry := entry{bb: rect, obj: rect, h: h, leaf: true}
 		node1.insertLeaf(entry)
 	}
 
 	rect2 := rect(Point{2, 0}, Point{2, 0})
 	h2 := hf2.Encode(getCenter(rect2)...)
-	entry2 := entry{bb: rect2, obj: rect2, h: h2.Uint64(), leaf: true}
+	entry2 := entry{bb: rect2, obj: rect2, h: h2, leaf: true}
 
 	node2, _ := handleOverflow(node1, entry2, siblings)
 
@@ -561,7 +561,7 @@ func TestRedistributeEntries(t *testing.T) {
 		rect := rect(Point{2, 1}, Point{2, 1})
 
 		h := hf.Encode(getCenter(rect)...)
-		leafEntry := entry{bb: rect, obj: rect, h: h.Uint64(), leaf: true}
+		leafEntry := entry{bb: rect, obj: rect, h: h, leaf: true}
 		entries.insert(leafEntry)
 	}
 
