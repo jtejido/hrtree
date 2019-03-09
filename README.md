@@ -2,7 +2,8 @@
 
 # hrtree
 
-<a href="https://travis-ci.org/jtejido/hrtree"><img src="https://img.shields.io/travis/jtejido/hrtree.svg?style=flat-square" alt="Build Status"></a>
+[![Build Status](https://travis-ci.org/jtejido/hrtree.svg?branch=master)](https://travis-ci.org/jtejido/hrtree) 
+[![codecov](https://codecov.io/gh/jtejido/hrtree/branch/master/graph/badge.svg)](https://codecov.io/gh/jtejido/hrtree)
 
 ### Hilbert R-tree
 
