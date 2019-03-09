@@ -30,7 +30,7 @@ type HRtree struct {
 
 // NewTree creates a new HRtree instance.
 func NewTree(min, max, bits int) (*HRtree, error) {
-	hf, err := h.New(uint32(bits), 2)
+	hf, err := h.New(uint32(bits), Dim)
 
 	if err != nil {
 		return nil, err
