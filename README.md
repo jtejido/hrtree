@@ -4,6 +4,7 @@
 
 [![Build Status](https://travis-ci.org/jtejido/hrtree.svg?branch=master)](https://travis-ci.org/jtejido/hrtree) 
 [![codecov](https://codecov.io/gh/jtejido/hrtree/branch/master/graph/badge.svg)](https://codecov.io/gh/jtejido/hrtree)
+[![MIT license](http://img.shields.io/badge/license-MIT-brightgreen.svg)](http://opensource.org/licenses/MIT)
 
 ### Hilbert R-tree
 
